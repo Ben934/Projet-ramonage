@@ -1,0 +1,6 @@
+clients.db
+__pycache__/
+*.pyc
+*.pyo
+venv/
+
