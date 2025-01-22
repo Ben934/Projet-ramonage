@@ -9,6 +9,42 @@ import plotly.express as px
 import plotly.graph_objects as go
 from matplotlib.ticker import MaxNLocator
 
+import streamlit as st
+import streamlit_authenticator as stauth
+
+# Configuration de l'authentification
+names = ['Votre Nom', 'Ami']
+usernames = ['votre_nom', 'ami']
+passwords = ['M@nuBenSTL2007', 'M@nuBenSTL2007']
+
+# Initialiser l'authentification
+authenticator = stauth.Authenticate(names, usernames, passwords, cookie_name="streamlit_auth", key="abc123")
+
+# Demander à l'utilisateur de se connecter
+name, authentication_status = authenticator.login("Se connecter", "main")
+
+# Si l'utilisateur est authentifié, afficher l'interface
+if authentication_status:
+    st.write(f"Bonjour {name}, bienvenue dans l'application !")
+
+    # Ici, vous pouvez ajouter votre interface Streamlit existante.
+    # Par exemple, votre code pour afficher les clients, ajouter des clients, etc.
+
+    menu = st.sidebar.radio("Menu", ["Ajouter un client", "Afficher/Modifier les clients", "Statistiques"])
+    
+    if menu == "Ajouter un client":
+        # Votre code existant pour ajouter un client
+        pass
+    elif menu == "Afficher/Modifier les clients":
+        # Votre code existant pour afficher/éditer les clients
+        pass
+    elif menu == "Statistiques":
+        # Votre code existant pour les statistiques
+        pass
+else:
+    st.warning("Nom d'utilisateur ou mot de passe incorrect.")
+
+
 # Créer la connexion à SQLite
 DATABASE_URL = "sqlite:///clients.db"
 engine = create_engine(DATABASE_URL, echo=True)
