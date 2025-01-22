@@ -5,7 +5,6 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy import Column, Integer, String, Float, Date
 from sqlalchemy.orm import sessionmaker
 import matplotlib.pyplot as plt
-import matplotlib.dates as mdates
 import plotly.express as px
 import plotly.graph_objects as go
 from matplotlib.ticker import MaxNLocator
@@ -57,6 +56,13 @@ def update_client(client_id, client_data):
         setattr(client, key, value)
     session.commit()
 
+# Fonction pour supprimer un client
+def delete_client(client_id):
+    client = session.query(Client).filter(Client.id == client_id).first()
+    if client:
+        session.delete(client)
+        session.commit()
+
 # Fonction pour afficher les données sous forme de DataFrame
 def show_clients():
     return pd.read_sql(session.query(Client).statement, session.bind)
@@ -106,7 +112,7 @@ elif menu == "Afficher/Modifier les clients":
     clients = show_clients()
     st.dataframe(clients)
 
-    client_id = st.number_input("Entrez l'ID du client à modifier", min_value=1, step=1)
+    client_id = st.number_input("Entrez l'ID du client à modifier ou supprimer", min_value=1, step=1)
     client_to_edit = session.query(Client).filter(Client.id == client_id).first()
 
     if client_to_edit:
@@ -140,9 +146,12 @@ elif menu == "Afficher/Modifier les clients":
             }
             update_client(client_id, client_data)
             st.success("Client modifié avec succès !")
+
+        if st.button("Supprimer client"):
+            delete_client(client_id)
+            st.success("Client supprimé avec succès !")
     else:
         st.warning("Client non trouvé.")
-    
 
 # Partie Statistiques
 elif menu == "Statistiques":
@@ -153,18 +162,17 @@ elif menu == "Statistiques":
 
     if not data.empty:
         # --- Sélection de l'année ---
-       # Assurez-vous que la colonne est au format datetime
         data['date_intervention'] = pd.to_datetime(data['date_intervention'], errors='coerce')
 
         # Extraire les années uniques
-        unique_years = sorted(data['date_intervention'].dropna().dt.year.unique())  # Ignorer les dates non valides
-        unique_years.insert(0, "Toutes les années")  # Ajouter une option pour toutes les années
+        unique_years = sorted(data['date_intervention'].dropna().dt.year.unique())
+        unique_years.insert(0, "Toute la période")  # Option pour toute la période
 
-        # Sélectionner une année ou toutes les années
+        # Sélectionner une année ou toute la période
         selected_year = st.selectbox("Sélectionner l'année", unique_years)
 
         # Filtrer les données
-        if selected_year == "Toutes les années":
+        if selected_year == "Toute la période":
             data_filtered = data
         else:
             data_filtered = data[data['date_intervention'].dt.year == selected_year]
@@ -184,62 +192,53 @@ elif menu == "Statistiques":
             st.metric("Prix moyen (€)", f"{avg_price:,.2f}")
 
         # --- Graphiques ---        
-        # 1. Graphique - Nombre de clients par ville
-        st.write("**Répartition des clients par ville :**")
-        ville_counts = data_filtered["ville"].value_counts()
-        # Convertir ville_counts en DataFrame
-        ville_counts_df = pd.DataFrame({
-            'Ville': ville_counts.index,
-            'Nombre de clients': ville_counts.values
-        })
+        col1, col2 = st.columns(2)
 
-        # Créer le graphique
-        fig1 = px.bar(ville_counts_df, x='Ville', y='Nombre de clients', 
-                    labels={'Ville': 'Ville', 'Nombre de clients': 'Nombre de clients'},
-                    title="Nombre de clients par ville", 
-                    color='Nombre de clients', color_continuous_scale="Viridis")
+        with col1:
+            st.write("**Répartition des clients par ville :**")
+            ville_counts = data_filtered["ville"].value_counts()
+            ville_counts_df = pd.DataFrame({
+                'Ville': ville_counts.index,
+                'Nombre de clients': ville_counts.values
+            })
+            fig1 = px.bar(ville_counts_df, x='Ville', y='Nombre de clients', 
+                          labels={'Ville': 'Ville', 'Nombre de clients': 'Nombre de clients'},
+                          title="Nombre de clients par ville", 
+                          color='Nombre de clients', color_continuous_scale="Viridis")
+            st.plotly_chart(fig1, use_container_width=True)
 
-        st.plotly_chart(fig1, use_container_width=True)
-
-        # 2. Graphique - Cumul du prix par mois
-        st.write("**Cumul du prix des interventions par mois :**")
-        data_filtered['mois_annee'] = data_filtered['date_intervention'].dt.to_period('M')
-
-        # Convertir la période en chaîne de caractères
-        data_filtered['mois_annee'] = data_filtered['mois_annee'].astype(str)
-
-        # Maintenant, les périodes sont sous forme de chaînes de caractères, ce qui peut être utilisé dans Plotly.
-        prix_par_mois = data_filtered.groupby('mois_annee')['prix_intervention'].sum().reset_index()
-
-        fig2 = px.line(prix_par_mois, x='mois_annee', y='prix_intervention', 
-                    title="Cumul des prix par mois", labels={'mois_annee': 'Mois', 'prix_intervention': 'Cumul du prix (€)'}, 
-                    markers=True)
-        fig2.update_xaxes(type='category')  # On utilise 'category' pour que les mois apparaissent correctement
-        st.plotly_chart(fig2, use_container_width=True)
-
+        with col2:
+            st.write("**Cumul du prix des interventions par mois :**")
+            data_filtered['mois_annee'] = data_filtered['date_intervention'].dt.to_period('M')
+            data_filtered['mois_annee'] = data_filtered['mois_annee'].astype(str)
+            prix_par_mois = data_filtered.groupby('mois_annee')['prix_intervention'].sum().reset_index()
+            fig2 = px.line(prix_par_mois, x='mois_annee', y='prix_intervention', 
+                           title="Cumul des prix par mois", labels={'mois_annee': 'Mois', 'prix_intervention': 'Cumul du prix (€)'}, 
+                           markers=True)
+            fig2.update_xaxes(type='category')  # On utilise 'category' pour que les mois apparaissent correctement
+            st.plotly_chart(fig2, use_container_width=True)
 
         # 3. Graphique - Répartition des difficultés de ramonage
-        st.write("**Répartition des difficultés de ramonage :**")
-        difficulte_counts = data_filtered['difficulte_ramonage'].value_counts()
-        fig3 = px.pie(difficulte_counts, names=difficulte_counts.index, values=difficulte_counts.values, 
-                      title="Répartition des difficultés de ramonage", hole=0.3)
-        st.plotly_chart(fig3, use_container_width=True)
+        col3, col4 = st.columns(2)
 
-        # 4. Graphique - Répartition des clients par élément de chauffe
-        st.write("**Répartition des clients par élément de chauffe :**")
-        element_counts = data_filtered['element_chauffe'].value_counts()
-        # Convertir element_counts en DataFrame
-        element_counts_df = pd.DataFrame({
-            'Élément de chauffe': element_counts.index,
-            'Nombre de clients': element_counts.values
-        })
+        with col3:
+            st.write("**Répartition des difficultés de ramonage :**")
+            difficulte_counts = data_filtered['difficulte_ramonage'].value_counts()
+            fig3 = px.pie(difficulte_counts, names=difficulte_counts.index, values=difficulte_counts.values, 
+                          title="Répartition des difficultés de ramonage", hole=0.3)
+            st.plotly_chart(fig3, use_container_width=True)
 
-        # Créer le graphique
-        fig4 = px.bar(element_counts_df, x='Élément de chauffe', y='Nombre de clients',
-                    title="Répartition des clients par élément de chauffe", 
-                    color='Nombre de clients', color_continuous_scale="Plasma")
-
-        st.plotly_chart(fig4, use_container_width=True)
+        with col4:
+            st.write("**Répartition des clients par élément de chauffe :**")
+            element_counts = data_filtered['element_chauffe'].value_counts()
+            element_counts_df = pd.DataFrame({
+                'Élément de chauffe': element_counts.index,
+                'Nombre de clients': element_counts.values
+            })
+            fig4 = px.bar(element_counts_df, x='Élément de chauffe', y='Nombre de clients',
+                          title="Répartition des clients par élément de chauffe", 
+                          color='Nombre de clients', color_continuous_scale="Plasma")
+            st.plotly_chart(fig4, use_container_width=True)
 
     else:
         st.warning("Aucune donnée disponible pour générer des statistiques.")
